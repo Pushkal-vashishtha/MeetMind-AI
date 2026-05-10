@@ -1,0 +1,7 @@
+.venv/
+vector_db/
+__pycache__/
+*.exe
+.env
+*.mp3
+*.mp4
