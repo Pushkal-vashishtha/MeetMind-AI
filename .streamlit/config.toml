@@ -1,0 +1,8 @@
+[theme]
+# Matches your "--surface" and "--panel" variables
+base = "light"
+primaryColor = "#e8440a"
+backgroundColor = "#f4f3ef"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#0e0e11"
+font = "sans serif"

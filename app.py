@@ -1,283 +1,270 @@
 import streamlit as st
 import time
-import base64
 from dotenv import load_dotenv
+
+# 1. LOAD ENV VARS FIRST
+load_dotenv()
+
+# 2. CUSTOM MODULES
 from utils.audio_processor import process_input
 from core.transcriber import transcribe_all
 from core.summarizer import summarize, generate_title
 from core.extractor import extract_action_items, extract_key_decisions, extract_questions
 from core.rag_engine import build_rag_chain, ask_question
 
-load_dotenv()
-
-# --- Page Config ---
+# ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="MeetMind AI | Intelligence Pipeline",
+    page_title="MeetMind AI",
     page_icon="🧠",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
-# --- Enhanced CSS (Glassmorphism & Cyberpunk) ---
+# ── Design System (Refined CSS) ───────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Syne:wght@700;800&family=JetBrains+Mono:wght@300;400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Fira+Code:wght@300;400;500&display=swap');
 
-:root {
-    --primary: #ff6b35;
-    --secondary: #7209b7;
-    --bg-dark: #050508;
-    --card-bg: rgba(20, 20, 35, 0.7);
-    --border: rgba(255, 107, 53, 0.2);
+/* Apply custom fonts */
+html, body, [class*="css"] {
+    font-family: 'Space Grotesk', sans-serif !important;
+}
+code, pre, .stChatMessage {
+    font-family: 'Fira Code', monospace !important;
 }
 
-/* Base Styles */
-.stApp {
-    background: radial-gradient(circle at top right, #1a1a2e, #050508);
-    color: #e8e4dc;
-    font-family: 'Inter', sans-serif;
-}
-
-/* Hide Default Elements */
-#MainMenu, footer, header { visibility: hidden; }
-.block-container { padding: 1.5rem 5% !important; }
-
-/* Hero Section */
-.hero-container {
-    padding: 2rem 0;
-    margin-bottom: 2rem;
-    border-bottom: 1px solid var(--border);
-}
-
-.hero-title {
-    font-family: 'Syne', sans-serif;
-    font-size: 5rem;
-    font-weight: 800;
-    line-height: 0.9;
-    background: linear-gradient(90deg, #fff 0%, var(--primary) 50%, #ff9500 100%);
+/* Beautiful Gradient Text for Main Headers */
+.gradient-text {
+    background: -webkit-linear-gradient(45deg, #e8440a, #2d6ef6);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    margin-bottom: 10px;
+    font-weight: 700;
+    font-size: 2.5rem;
+    margin-bottom: 0px;
 }
 
-/* Glass Cards */
-.glass-card {
-    background: var(--card-bg);
-    backdrop-filter: blur(12px);
-    border: 1px solid var(--border);
+/* Custom Cards for Data */
+.mm-card {
+    background: #ffffff;
+    border: 1px solid #e2e0d8;
     border-radius: 12px;
-    padding: 1.5rem;
-    transition: all 0.3s ease;
-    margin-bottom: 1rem;
+    padding: 20px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    margin-bottom: 15px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.mm-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
 }
 
-.glass-card:hover {
-    border-color: var(--primary);
-    box-shadow: 0 0 20px rgba(255, 107, 53, 0.15);
+.dark-mode .mm-card {
+    background: #1e1e22;
+    border: 1px solid #333;
 }
 
-/* Input Overrides */
-.stTextInput input, .stSelectbox select {
-    background: rgba(0,0,0,0.3) !important;
-    border: 1px solid var(--border) !important;
-    color: white !important;
-    border-radius: 8px !important;
-}
-
-/* Fancy Buttons */
-div.stButton > button {
-    background: linear-gradient(90deg, var(--primary), #ff9500) !important;
-    color: white !important;
-    border: none !important;
-    font-family: 'Syne', sans-serif !important;
-    font-weight: 700 !important;
-    letter-spacing: 1px !important;
-    border-radius: 8px !important;
-    padding: 0.75rem 2rem !important;
-    width: 100%;
-}
-
-/* Checklist Styling */
-.check-item {
+/* Extraction Lists */
+.mm-list { list-style: none; padding: 0; margin: 0; }
+.mm-list li {
+    padding: 12px;
+    margin-bottom: 8px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.5;
     display: flex;
-    gap: 12px;
     align-items: flex-start;
-    margin-bottom: 10px;
-    font-size: 0.9rem;
-    color: #ccc;
+    gap: 12px;
 }
-.check-icon { color: var(--primary); font-weight: bold; }
+.mm-action { background: rgba(232,68,10,0.05); border-left: 3px solid #e8440a; }
+.mm-decision { background: rgba(45,110,246,0.05); border-left: 3px solid #2d6ef6; }
+.mm-question { background: rgba(26,184,122,0.05); border-left: 3px solid #1ab87a; }
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
-
+/* Transcript Scroll Box */
+.mm-transcript-box {
+    height: 400px;
+    overflow-y: auto;
+    background: #f4f3ef;
+    padding: 20px;
+    border-radius: 8px;
+    font-family: 'Fira Code', monospace;
+    font-size: 12px;
+    line-height: 1.8;
+    color: #555;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# --- Session State ---
+# ── Session State ─────────────────────────────────────────────────────────────
 if "pipeline_result" not in st.session_state:
     st.session_state.pipeline_result = None
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# --- Header ---
-st.markdown("""
-<div class="hero-container">
-    <div class="hero-title">MEETMIND.AI</div>
-    <div style="font-family:'JetBrains Mono'; color: #666; letter-spacing: 3px; font-size: 0.8rem;">
-        COGNITIVE VIDEO ANALYSIS // RAG v2.0
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-# --- Sidebar/Inputs ---
-with st.container():
-    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-    c1, c2 = st.columns([3, 1])
-    with c1:
-        source = st.text_input("Data Source (YouTube URL or File Path)", placeholder="Paste link here...")
-    with c2:
-        language = st.selectbox("Intelligence Mode", ["english", "hinglish"])
+# ── Sidebar ───────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## 🧠 Meet*Mind*")
+    st.caption("COGNITIVE PIPELINE • RAG v2.0")
+    st.divider()
     
-    run_btn = st.button("⚡ ANALYZE NEURAL STREAM")
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("### Workspace")
+    st.button("⚡ Analyze New", use_container_width=True, type="primary")
+    st.button("📁 Sessions (3)", use_container_width=True)
+    st.button("📚 Library", use_container_width=True)
+    
+    st.divider()
+    st.markdown("### System Specs")
+    st.code("Model: mistral-small-latest\nAudio: whisper-small\nVector: Chroma\nEmbed: all-MiniLM-L6", language="yaml")
+    st.success("🟢 System Ready")
 
-# --- Logic Processing ---
+# ── Main Header ───────────────────────────────────────────────────────────────
+st.markdown('<p class="gradient-text">Neural Stream Ingestion</p>', unsafe_allow_html=True)
+st.write("Convert any meeting into structured intelligence, decisions, and searchable memory.")
+st.markdown("<br>", unsafe_allow_html=True)
+
+# ── Input Area ────────────────────────────────────────────────────────────────
+with st.container(border=True):
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        source = st.text_input("Source URL or Path", placeholder="https://youtube.com/watch?v=... or /path/to/meeting.mp4", label_visibility="collapsed")
+    with col2:
+        language = st.selectbox("Language", ["english", "hinglish"], label_visibility="collapsed")
+
+    run_btn = st.button("⚡ Initiate Analysis", type="primary", use_container_width=True)
+
+# ── Pipeline Execution (Native Streamlit Status) ──────────────────────────────
 if run_btn and source:
-    # Reset state for new run
     st.session_state.pipeline_result = None
     st.session_state.chat_history = []
     
-    steps = [
-        ("🔊", "Processing Audio"),
-        ("✍️", "Transcribing"),
-        ("🏷️", "Defining Title"),
-        ("📋", "Synthesizing Summary"),
-        ("✅", "Mapping Actions"),
-        ("🔑", "Extracting Decisions"),
-        ("❓", "Isolating Queries"),
-        ("🧠", "Indexing Knowledge"),
-    ]
-    
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    try:
-        # We simulate visual progress while running tasks
-        for i, (icon, msg) in enumerate(steps):
-            status_text.markdown(f"**{icon} System Status:** {msg}...")
-            progress_bar.progress((i + 1) / len(steps))
+    # st.status provides a gorgeous native loading state
+    with st.status("Initializing Neural Pipeline...", expanded=True) as status:
+        try:
+            st.write("🔊 Extracting and processing audio chunks...")
+            chunks = process_input(source)
             
-            # Actual execution mapped to steps
-            if i == 0: chunks = process_input(source)
-            elif i == 1: transcript = transcribe_all(chunks, language)
-            elif i == 2: title = generate_title(transcript)
-            elif i == 3: summary = summarize(transcript)
-            elif i == 4: action_items = extract_action_items(transcript)
-            elif i == 5: decisions = extract_key_decisions(transcript)
-            elif i == 6: questions = extract_questions(transcript)
-            elif i == 7: rag_chain = build_rag_chain(transcript)
+            st.write("✍️ Transcribing with Whisper...")
+            transcript = transcribe_all(chunks, language)
+            
+            st.write("🏷 Generating semantic title...")
+            title = generate_title(transcript)
+            
+            st.write("📋 Compiling executive summary...")
+            summary = summarize(transcript)
+            
+            st.write("🎯 Extracting action items, decisions, and questions...")
+            action_items = extract_action_items(transcript)
+            decisions = extract_key_decisions(transcript)
+            questions = extract_questions(transcript)
+            
+            st.write("🧠 Indexing vectors for RAG...")
+            rag_chain = build_rag_chain(transcript)
 
-        st.session_state.pipeline_result = {
-            "title": title, "transcript": transcript, "summary": summary,
-            "action_items": action_items, "key_decisions": decisions,
-            "open_questions": questions, "rag_chain": rag_chain
-        }
-        st.success("Neural Analysis Complete.")
-        time.sleep(1)
-        st.rerun()
-
-    except Exception as e:
-        st.error(f"Critical System Failure: {e}")
-
-# --- Results Rendering ---
-if st.session_state.pipeline_result:
-    res = st.session_state.pipeline_result
-
-    # 1. Title Highlight
-    st.markdown(f"""
-    <div class="glass-card" style="border-left: 4px solid var(--primary);">
-        <small style="color:var(--primary); font-family:'JetBrains Mono';">SESSION TITLE</small>
-        <h2 style="margin:0; font-family:'Syne';">{res['title']}</h2>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # 2. Summary and Transcript Split
-    col_left, col_right = st.columns([2, 1])
-    
-    with col_left:
-        st.markdown(f"""
-        <div class="glass-card">
-            <h4 style="color:var(--primary); font-family:'Syne'; font-size:0.9rem;">📋 EXECUTIVE SUMMARY</h4>
-            <p style="font-size:0.95rem; line-height:1.6; color:#ddd;">{res['summary']}</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col_right:
-        st.markdown(f"""
-        <div class="glass-card">
-            <h4 style="color:var(--primary); font-family:'Syne'; font-size:0.9rem;">📄 RAW DATA</h4>
-            <div style="height:200px; overflow-y:auto; font-family:'JetBrains Mono'; font-size:0.75rem; color:#888;">
-                {res['transcript']}
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # 3. Triple Grid (Actions, Decisions, Questions)
-    c1, c2, c3 = st.columns(3)
-    
-    def format_list(text, icon):
-        items = [i.strip() for i in text.split('\n') if i.strip()]
-        html = ""
-        for item in items:
-            clean = item.lstrip("-•*123456789.) ")
-            html += f'<div class="check-item"><span class="check-icon">{icon}</span>{clean}</div>'
-        return html
-
-    with c1:
-        st.markdown(f'<div class="glass-card"><h4 style="font-size:0.8rem; color:var(--primary);">ACTION ITEMS</h4>{format_list(res["action_items"], "→")}</div>', unsafe_allow_html=True)
-    with c2:
-        st.markdown(f'<div class="glass-card"><h4 style="font-size:0.8rem; color:#7209b7;">KEY DECISIONS</h4>{format_list(res["key_decisions"], "✦")}</div>', unsafe_allow_html=True)
-    with c3:
-        st.markdown(f'<div class="glass-card"><h4 style="font-size:0.8rem; color:#ff9500;">OPEN QUESTIONS</h4>{format_list(res["open_questions"], "?")}</div>', unsafe_allow_html=True)
-
-    # 4. RAG Chat Section
-    st.markdown("<br><h3 style='font-family:Syne;'>💬 NEURAL CHAT ASSISTANT</h3>", unsafe_allow_html=True)
-    
-    # Custom Chat UI Container
-    chat_container = st.container()
-    with chat_container:
-        for message in st.session_state.chat_history:
-            if message["role"] == "user":
-                st.chat_message("user").write(message["content"])
-            else:
-                st.chat_message("assistant", avatar="🧠").write(message["content"])
-
-    if prompt := st.chat_input("Query the meeting memory..."):
-        st.session_state.chat_history.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        with st.chat_message("assistant", avatar="🧠"):
-            with st.spinner("Retrieving from context..."):
-                response = ask_question(res["rag_chain"], prompt)
-                st.markdown(response)
-        
-        st.session_state.chat_history.append({"role": "assistant", "content": response})
-
-    # Clear Chat
-    if st.session_state.chat_history:
-        if st.button("Wipe Chat Memory"):
-            st.session_state.chat_history = []
+            st.session_state.pipeline_result = {
+                "title": title,
+                "transcript": transcript,
+                "summary": summary,
+                "action_items": action_items,
+                "key_decisions": decisions,
+                "open_questions": questions,
+                "rag_chain": rag_chain,
+            }
+            
+            status.update(label="Analysis Complete!", state="complete", expanded=False)
             st.rerun()
 
-else:
+        except Exception as e:
+            status.update(label="Pipeline Failure", state="error", expanded=True)
+            st.error(f"Error details: {e}")
+
+# ── Results Area ──────────────────────────────────────────────────────────────
+if st.session_state.pipeline_result:
+    res = st.session_state.pipeline_result
+    
+    # Header & Metrics
+    st.markdown(f"## {res['title']}")
+    
+    def count_items(text):
+        return len([l for l in text.strip().split("\n") if l.strip()])
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Words Indexed", f"{len(res['transcript'].split()):,}")
+    m2.metric("Action Items", count_items(res["action_items"]))
+    m3.metric("Key Decisions", count_items(res["key_decisions"]))
+    m4.metric("Est. Duration", f"{len(res['transcript'].split()) // 130} min")
+    
+    st.divider()
+
+    # Tabs for clean UX
+    tab_summary, tab_extracts, tab_transcript, tab_chat = st.tabs([
+        "📋 Executive Summary", 
+        "🎯 Key Extractions", 
+        "📄 Transcript", 
+        "🧠 Neural Chat"
+    ])
+
+    with tab_summary:
+        st.markdown(f"""
+        <div class="mm-card">
+            <h4>Executive Overview</h4>
+            <p style="font-size: 1.1rem; line-height: 1.8;">{res["summary"]}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with tab_extracts:
+        col_act, col_dec, col_que = st.columns(3)
+        
+        def render_html_list(text, css_class):
+            lines = [l.strip().lstrip("-•*0123456789.) ").strip() for l in text.strip().split("\n") if l.strip()]
+            if not lines: return "<p>None found.</p>"
+            list_items = "".join([f"<li class='{css_class}'>{line}</li>" for line in lines])
+            return f"<ul class='mm-list'>{list_items}</ul>"
+
+        with col_act:
+            st.markdown("#### ✅ Actions")
+            st.markdown(render_html_list(res["action_items"], "mm-action"), unsafe_allow_html=True)
+        with col_dec:
+            st.markdown("#### 🔑 Decisions")
+            st.markdown(render_html_list(res["key_decisions"], "mm-decision"), unsafe_allow_html=True)
+        with col_que:
+            st.markdown("#### ❓ Open Questions")
+            st.markdown(render_html_list(res["open_questions"], "mm-question"), unsafe_allow_html=True)
+
+    with tab_transcript:
+        st.markdown(f'<div class="mm-transcript-box">{res["transcript"]}</div>', unsafe_allow_html=True)
+
+    with tab_chat:
+        st.markdown("### Query the Meeting Context")
+        
+        # Chat container to keep it bound within the tab
+        chat_container = st.container(height=400)
+        
+        with chat_container:
+            for msg in st.session_state.chat_history:
+                avatar = "👤" if msg["role"] == "user" else "🧠"
+                with st.chat_message(msg["role"], avatar=avatar):
+                    st.write(msg["content"])
+
+        if prompt := st.chat_input("Ask anything about this meeting..."):
+            st.session_state.chat_history.append({"role": "user", "content": prompt})
+            
+            with chat_container:
+                with st.chat_message("user", avatar="👤"):
+                    st.write(prompt)
+                
+                with st.chat_message("assistant", avatar="🧠"):
+                    with st.spinner("Searching neural context..."):
+                        answer = ask_question(res["rag_chain"], prompt)
+                        st.write(answer)
+            
+            st.session_state.chat_history.append({"role": "assistant", "content": answer})
+            st.rerun()
+
+elif not run_btn:
     # Empty State
     st.markdown("""
-    <div style="text-align:center; padding: 100px 0; opacity: 0.3;">
-        <h1 style="font-size: 100px; margin:0;">📡</h1>
-        <p style="font-family:'JetBrains Mono';">AWAITING INPUT STREAM...</p>
+    <div style="text-align: center; padding: 100px 20px; color: #8a8880;">
+        <h1 style="font-size: 4rem; opacity: 0.2; margin-bottom: 0;">📡</h1>
+        <h3 style="font-family: 'Fira Code', monospace; letter-spacing: 2px; text-transform: uppercase; font-size: 1rem;">Awaiting Data Stream</h3>
+        <p>Enter a meeting source above to begin cognitive processing.</p>
     </div>
     """, unsafe_allow_html=True)
